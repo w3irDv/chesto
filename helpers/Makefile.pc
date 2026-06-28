@@ -1,4 +1,5 @@
 CXX = g++
+CC  = gcc
 
 CFLAGS   += -g -Wall -DPC
 INCLUDES += /usr/local/include /opt/homebrew/include C:/MSYS2/mingw64/include
@@ -13,8 +14,39 @@ else
 	INCLUDES += /usr/include/SDL /usr/local/include/SDL C:/MSYS2/mingw64/include/SDL
 endif
 
-pc: $(OFILES)
-	$(CXX) $(OFILES) $(LDFLAGS) $(LIBPATHS) -o $(BINARY).bin -fstack-protector-all
+# Build PC objects into their own directory instead of the project root. The
+# console builds (e.g. build_wiiu) already isolate their objects this way; the
+# PC build used to drop .o files in the root, which is on VPATH (SOURCES has
+# "."). A later "make wiiu" would then resolve its PowerPC objects to those
+# stray x86 .o via VPATH and skip compiling, so linking failed with "cannot
+# find main.o". Keeping PC objects in build_pc/ lets PC and console builds
+# coexist without a "make clean" in between.
+PC_BUILD  := build_pc
+PC_OFILES := $(addprefix $(PC_BUILD)/,$(OFILES))
 
-%.o: %.cpp %.c
-	$(CXX) $(CFLAGS) $(CXXFLAGS) $(INCLUDE) $< -c -o $@ -fstack-protector-all
+pc: $(PC_OFILES)
+	$(CXX) $(PC_OFILES) $(LDFLAGS) $(LIBPATHS) -o $(BINARY).bin -fstack-protector-all
+
+# -MMD -MP makes the compiler emit a per-object ".d" file (next to the .o, so in
+# build_pc/) listing the headers that object depends on (-MP adds phony targets
+# so a deleted header doesn't break the build). The "-include" below pulls those
+# in, so editing a header now recompiles every object that includes it -- without
+# this, changing e.g. a class's members in a .hpp left dependent .o files stale,
+# producing object layout/ODR mismatches at runtime.
+DEPFLAGS := -MMD -MP
+
+$(PC_BUILD):
+	@mkdir -p $@
+
+# VPATH (set from SOURCES) locates the matching .cpp/.c for each stem.
+$(PC_BUILD)/%.o: %.cpp | $(PC_BUILD)
+	$(CXX) $(CFLAGS) $(CXXFLAGS) $(DEPFLAGS) $(INCLUDE) $< -c -o $@ -fstack-protector-all
+
+# C sources (e.g. SDL_FontCache.c) build with the C compiler and *without* the
+# C++ flags (no -std=gnu++20). Previously the lone "%.o: %.cpp %.c" rule never
+# matched a .c-only target, so make fell back to its built-in C rule; mirror that
+# here so e.g. C's legal float->int narrowing doesn't trip -Werror under g++.
+$(PC_BUILD)/%.o: %.c | $(PC_BUILD)
+	$(CC) $(CFLAGS) $(DEPFLAGS) $(INCLUDE) $< -c -o $@ -fstack-protector-all
+
+-include $(PC_OFILES:.o=.d)

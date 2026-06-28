@@ -110,6 +110,7 @@ endif
 
 .PHONY: clean
 clean:
-	$(shell rm -rf build_3ds build_wii build_wiiu build_switch)
+	$(shell rm -rf build_pc build_3ds build_wii build_wiiu build_switch)
 	$(shell find . -name "*.o" -exec rm {} \;)
+	$(shell find . -name "*.d" -exec rm {} \;)
 	@echo "It is done."
