@@ -173,7 +173,13 @@ void TextElement::setWrappedWidth(int wrapped_width)
 
 void TextElement::update(bool forceUpdate)
 {
-	std::string key = Texture::textElemPrefix + text + std::to_string(textSize);
+	// Key the cache on colour too, not just text+size: without this, two elements
+	// with the same string and size share one texture regardless of colour, so
+	// whichever renders first fixes the colour for all the rest (e.g. duplicate
+	// Mii names showing white instead of their warning colour).
+	std::string key = Texture::textElemPrefix + text + std::to_string(textSize)
+		+ "#" + std::to_string(textColor.r) + "," + std::to_string(textColor.g)
+		+ "," + std::to_string(textColor.b) + "," + std::to_string(textColor.a);
 
 	clear();
 
